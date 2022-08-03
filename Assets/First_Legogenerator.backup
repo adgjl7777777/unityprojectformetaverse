@@ -1,0 +1,382 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class First_Legogenerator : BaseLegogenerator
+{
+    /// <summary>
+    /// 물체에 대한 기본 길이 정보
+    /// </summary>
+    public int length = 2; //x
+    public int height = 1; //y
+    public int width = 2; //z
+    public float realw = 0.8f;
+    public float realh = 0.96f;
+    public float cylr = 0.24f;
+    public float cylh = 0.16f;
+    public float thickw = 0.16f;
+    public float thickh = 0.16f;
+    public float lrealw = 0.79f;
+    public float? holeo = null;
+    public int polygon = 24; //원 구현에 필요한 다각형
+    float maxreach;
+
+
+    /// <summary>
+    /// 구현에 필요한 meshFilter와 boxCollider
+    /// </summary>
+    MeshFilter meshFilter;
+    BoxCollider boxCollider;
+    Mesh mesh;
+    MeshCollider meshCollider = null;
+    GameObject Realisticlego;
+    
+    /// <summary>
+    /// 연결부위들의 위치와 정보 구현
+    /// </summary>
+    public Dictionary<int, List<Vector3>> inoutpeak = new Dictionary<int, List<Vector3>>
+    {
+        { 0, new List<Vector3>()},
+        { 1, new List<Vector3>()}
+    };
+
+    /// <summary>
+    /// 피크 평면 구현
+    /// </summary>
+    public class peakplane
+    {
+        public Vector3 zeroPoint = new Vector3(0, 0, 0);
+        public Vector3 normalPlane = new Vector3(0, 1, 0);
+        public int possiblePeakTyle;
+        public List<int> peaklist = new List<int>();
+
+        public peakplane()
+        {
+
+        }
+        public peakplane(Vector3 zeroPoint, Vector3 normalPlane)
+        {
+            this.zeroPoint = zeroPoint;
+            this.normalPlane = normalPlane;
+        }
+        public peakplane(Vector3 zeroPoint, Vector3 normalPlane, int possiblePeakTyle)
+        {
+            this.zeroPoint = zeroPoint;
+            this.normalPlane = normalPlane;
+            this.possiblePeakTyle = possiblePeakTyle;
+        }
+        public peakplane(Vector3 zeroPoint, Vector3 normalPlane, int possiblePeakTyle, List<int> peaklist)
+        {
+            this.zeroPoint = zeroPoint;
+            this.normalPlane = normalPlane;
+            this.possiblePeakTyle = possiblePeakTyle;
+            this.peaklist = peaklist;
+        }
+    }
+    public List<peakplane> peakplanelist = new List<peakplane>();
+
+    /// <summary>
+    /// 메쉬로 피크 구현
+    /// </summary>
+    /// <param name="peak"></param>
+    /// <param name="least_start"></param>
+    /// <returns></returns>
+    (Vector3[], List<int>, int) PeakGenerator(int[] peak, int least_start)
+    {
+        Vector3[] peak_vertices = new Vector3[polygon * 2 * peak[0] * peak[1]];
+        for (int i = 0; i < peak[0] * peak[1]; i++)
+        {
+            Vector3 base_center = new Vector3((-(peak[0] - 1) / 2f + i % peak[0]) * realw, height / 2f * realh, (-(peak[1] - 1) / 2f + i / peak[0]) * realw); // 중앙
+
+            for (int j = 0; j < polygon; j++)
+            {
+                peak_vertices[j + i * 2 * polygon] = base_center + new Vector3(cylr * Mathf.Cos((float)j / polygon * 2 * Mathf.PI), 0, cylr * Mathf.Sin((float)j / polygon * 2 * Mathf.PI)); //원통 아랫부분
+                peak_vertices[j + polygon + i * 2 * polygon] = peak_vertices[j + i * 2 * polygon] + new Vector3(0, cylh, 0); // 원통 윗부분
+            }
+
+        }
+        List<int> peak_triangles = new List<int>();
+        for (int i = 0; i < peak[0] * peak[1]; i++)
+        {
+
+            for (int j = 0; j < polygon - 1; j++)
+            {
+                peak_triangles.Add(least_start + j + 1 + i * 2 * polygon);
+                peak_triangles.Add(least_start + j + i * 2 * polygon);
+                peak_triangles.Add(least_start + j + polygon + i * 2 * polygon);
+                peak_triangles.Add(least_start + j + 1 + i * 2 * polygon);
+                peak_triangles.Add(least_start + j + polygon + i * 2 * polygon);
+                peak_triangles.Add(least_start + j + 1 + polygon + i * 2 * polygon);
+            }
+            peak_triangles.Add(least_start + i * 2 * polygon);
+            peak_triangles.Add(least_start + polygon - 1 + i * 2 * polygon);
+            peak_triangles.Add(least_start + polygon * 2 - 1 + i * 2 * polygon);
+            peak_triangles.Add(least_start + i * 2 * polygon);
+            peak_triangles.Add(least_start + polygon * 2 - 1 + i * 2 * polygon);
+            peak_triangles.Add(least_start + polygon + i * 2 * polygon);
+            for (int j = 2; j < polygon; j++)
+            {
+                peak_triangles.Add(least_start + polygon + j + i * 2 * polygon);
+                peak_triangles.Add(least_start + polygon + j - 1 + i * 2 * polygon);
+                peak_triangles.Add(least_start + polygon + i * 2 * polygon);
+            }
+        }
+        return (peak_vertices, peak_triangles, polygon * 2 * peak[0] * peak[1]);
+    }
+
+    /// <summary>
+    /// 메쉬로 하부측 구멍 구현
+    /// </summary>
+    /// <param name="hole"></param>
+    /// <param name="least_start"></param>
+    /// <returns></returns>
+    (Vector3[], List<int>, int) HoleGenerator(int[] hole, int least_start)
+    {
+        if (holeo == null)
+        {
+            holeo = realw * Mathf.Sqrt(2) / 2 - cylr;
+        }
+
+        Vector3[] peak_vertices = new Vector3[polygon * 4 * hole[0] * hole[1]];
+        for (int i = 0; i < hole[0] * hole[1]; i++)
+        {
+            Vector3 base_center = new Vector3((-(hole[0] - 1) / 2f + i % hole[0]) * realw, - height / 2f * realh, (-(hole[1] - 1) / 2f + i / hole[0]) * realw); // 중앙
+
+            for (int j = 0; j < polygon; j++)
+            {
+                peak_vertices[j + i * 4 * polygon] = base_center + new Vector3((float)holeo * Mathf.Cos((float)j / polygon * 2 * Mathf.PI), 0, (float)holeo * Mathf.Sin((float)j / polygon * 2 * Mathf.PI)); //원통 아랫부분 바깥
+                peak_vertices[j + polygon + i * 4 * polygon] = base_center + new Vector3(cylr * Mathf.Cos((float)j / polygon * 2 * Mathf.PI), 0, cylr * Mathf.Sin((float)j / polygon * 2 * Mathf.PI)); //원통 아랫부분 안
+                peak_vertices[j + 2 * polygon + i * 4 * polygon] = peak_vertices[j + i * 4 * polygon] + new Vector3(0, realh*height-thickh, 0); // 원통 윗부분 바깥
+                peak_vertices[j + 3 * polygon + i * 4 * polygon] = peak_vertices[j + i * 4 * polygon + polygon] + new Vector3(0, realh * height - thickh, 0); // 원통 윗부분 안
+            }
+
+        }
+        List<int> peak_triangles = new List<int>();
+        for (int i = 0; i < hole[0] * hole[1]; i++)
+        {
+
+            for (int j = 0; j < polygon - 1; j++)
+            {
+                peak_triangles.Add(least_start + j + 1 + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 2 * polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 2 * polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + 2 * polygon + i * 4 * polygon); // 바깥
+
+                peak_triangles.Add(least_start + j + polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 3 * polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 3 * polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + 3 * polygon + i * 4 * polygon); // 안
+            }
+            peak_triangles.Add(least_start + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 3 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 3 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + 2 * polygon + i * 4 * polygon);
+
+
+            peak_triangles.Add(least_start + 2 * polygon - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 4 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 4 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon + i * 4 * polygon);
+            peak_triangles.Add(least_start + 3 * polygon + i * 4 * polygon);
+
+            for (int j = 0; j < polygon - 1; j++)
+            {
+                peak_triangles.Add(least_start + j + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + polygon + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + i * 4 * polygon);
+                peak_triangles.Add(least_start + j + 1 + polygon + i * 4 * polygon);
+            }
+            peak_triangles.Add(least_start + polygon - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 2 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon * 2 - 1 + i * 4 * polygon);
+            peak_triangles.Add(least_start + i * 4 * polygon);
+            peak_triangles.Add(least_start + polygon + i * 4 * polygon);
+        }
+        return (peak_vertices, peak_triangles, polygon * 4 * hole[0] * hole[1]);
+    }
+
+    /// <summary>
+    /// 메쉬로 외곽부 구현
+    /// </summary>
+    /// <returns></returns>
+    (Vector3[], List<int>, int) OutlineGenerator()
+    {
+        Vector3[] base_vertices = new Vector3[16];
+        for (int i = 0; i < 8; i++) // 외곽과 두께
+
+        {
+            base_vertices[i] = new Vector3((((i >> 0) % 2) - 0.5f) * (lrealw * 2 + realw * (length - 2)),
+                                      (((i >> 1) % 2) - 0.5f) * realh * height,
+                                      (((i >> 2) % 2) - 0.5f) * (lrealw * 2 + realw * (width - 2)));
+            base_vertices[i + 8] = new Vector3((((i >> 0) % 2) - 0.5f) * ((lrealw - thickw) * 2 + realw * (length - 2)),
+                                      (((i >> 1) % 2) - 0.5f) * realh * height - (i >> 1) % 2 * thickh,
+                                      (((i >> 2) % 2) - 0.5f) * ((lrealw - thickw) * 2 + realw * (width - 2)));
+        }
+        int[] base_base_triangles = new int[30 + 30 + 24] { 2, 1, 0, 1, 2, 3, 4, 2, 0, 2, 4, 6, 1, 3, 5, 7, 5, 3, 6, 3, 2, 3, 6, 7, 4, 5, 6, 7, 6, 5, //외곽
+                                              13, 14, 15, 14, 13, 12, 15, 14, 11, 10, 11, 14, 11, 13, 15, 13, 11, 9, 14, 12, 10, 8, 10, 12, 11, 10, 9, 8, 9, 10, // 두께
+                                              0,1,8,9,8,1,8,4,0,4,8,12,13,5,4,4,12,13,1,5,9,13,9,5};
+
+        List<int> base_triangles = new List<int>(base_base_triangles);
+
+        return (base_vertices, base_triangles, 16);
+    }
+
+    /// <summary>
+    /// 외곽부 좌표 반환
+    /// </summary>
+    /// <returns></returns>
+    public (Vector3[], int) OutlineInfo() //아랫쪽
+    {
+        Vector3[] Realoutline = new Vector3[8];
+        for(int i = 0; i < 8; i++)
+        {
+            Realoutline[i] = new Vector3((((i >> 0) % 2) - 0.5f) * (lrealw * 2 + realw * (length - 2)),
+                                      (((i >> 1) % 2) - 0.5f) * realh * height+ ((i >> 1) % 2) * cylh,
+                                      (((i >> 2) % 2) - 0.5f) * (lrealw * 2 + realw * (width - 2)));
+        }
+        return (Realoutline, 9);
+    }
+
+    /// <summary>
+    /// 피크 정보 계산
+    /// </summary>
+    /// <param name="peak"></param>
+    void inout(int[] peak)
+    {
+        peakplanelist.Add(new peakplane(
+            new Vector3(0, -height / 2f * realh, 0),
+            new Vector3(0, -1, 0),
+            0
+            ));
+        peakplanelist.Add(new peakplane(
+            new Vector3(0, height / 2f * realh, 0),
+            new Vector3(0, 1, 0),
+            1
+            ));
+        for (int i = 0; i < peak[0] * peak[1]; i++)
+        {
+
+            inoutpeak[0].Add(new Vector3((-(peak[0] - 1) / 2f + i % peak[0]) * realw, -height / 2f * realh, (-(peak[1] - 1) / 2f + i / peak[0]) * realw)); // 중앙
+            inoutpeak[1].Add(new Vector3((-(peak[0] - 1) / 2f + i % peak[0]) * realw, height / 2f * realh, (-(peak[1] - 1) / 2f + i / peak[0]) * realw)); // 중앙
+
+            peakplanelist[0].peaklist.Add(i);
+            peakplanelist[1].peaklist.Add(i);
+        }
+    }
+
+    /// <summary>
+    /// 전체 메쉬 구현
+    /// </summary>
+    /// <param name="meshFilter"></param>
+    /// <param name="boxCollider"></param>
+    void TotalGenerator(MeshFilter meshFilter, BoxCollider boxCollider)
+    {
+        boxCollider.center = new Vector3(0, cylh / 2, 0);
+        boxCollider.size = new Vector3(lrealw * 2 + realw * (length - 2), realh * height + cylh, lrealw * 2 + realw * (width - 2));
+        maxreach = Vector3.Magnitude()
+        mesh = new Mesh();
+        int[] hole = new int[2] { length - 1, width - 1 };
+        int[] peak = new int[2] { length, width };
+        int least_start = 0;
+        int dummy = 0;
+        inout(peak);
+
+        Vector3[] base_vertices, peak_vertices, hole_vertices;
+        List<int> base_triangles, peak_triangles, hole_triangles;
+
+        (base_vertices, base_triangles, dummy) = OutlineGenerator();
+        least_start += dummy;
+        (peak_vertices, peak_triangles, dummy) = PeakGenerator(peak, least_start);
+        least_start += dummy;
+        (hole_vertices, hole_triangles, dummy) = HoleGenerator(hole, least_start);
+
+        List<Vector3> vertices = new List<Vector3>();
+        vertices.AddRange(base_vertices);
+        vertices.AddRange(peak_vertices);
+        vertices.AddRange(hole_vertices);
+
+        List<int> triangles = new List<int>();
+        triangles.AddRange(base_triangles);
+        triangles.AddRange(peak_triangles);
+        triangles.AddRange(hole_triangles);
+
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        mesh.name = "wa sans";
+        mesh.RecalculateNormals();
+        meshFilter.mesh = mesh;
+    }
+
+    /// <summary>
+    /// 유니티 시작시 실행
+    /// </summary>
+    void Start()
+    {
+        MeshRenderer meshRenderer = gameObject.AddComponent<MeshRenderer>();
+        meshRenderer.material = Resources.Load<Material>("New Material");
+        meshFilter = gameObject.AddComponent<MeshFilter>();
+        boxCollider = gameObject.AddComponent<BoxCollider>();
+        TotalGenerator(meshFilter, boxCollider);
+    }
+
+    /// <summary>
+    /// 유니티 업데이트시 실행
+    /// </summary>
+    void Update()
+    {
+        
+    }
+
+    /// <summary>
+    /// 모양이 바뀌게 되면 바뀐 정보 구현
+    /// </summary>
+    /// <param name="l"></param>
+    /// <param name="h"></param>
+    /// <param name="w"></param>
+    public void ChangeShape(int l, int h, int w)
+    {
+        length = l;
+        height = h;
+        width = w;
+        meshFilter.mesh.Clear(false);
+        TotalGenerator(meshFilter, boxCollider);
+    }
+
+    public void MeshColliderGenerator()
+    {
+        if (meshCollider == null)
+        {
+            Realisticlego = Instantiate(new GameObject(), new Vector3(0, 0, 0), Quaternion.identity);
+            Realisticlego.transform.SetParent(this.transform, false);
+            Realisticlego.name = ("realisticlego");
+            Realisticlego.layer = LayerMask.NameToLayer("Realistic");
+            meshCollider = Realisticlego.AddComponent<MeshCollider>();
+            meshCollider.enabled = true;
+            meshCollider.convex = false;
+            meshCollider.isTrigger = true;
+            meshCollider.sharedMesh = mesh;
+        }
+        else
+        {
+            Realisticlego.SetActive(true);
+            meshCollider.enabled = true;
+
+        }
+    }
+
+    public void MeshColliderDisabler()
+    {
+        meshCollider.enabled = false;
+        
+    }
+}

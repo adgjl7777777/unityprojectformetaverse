@@ -1,0 +1,113 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+public class LegoPlace : MonoBehaviour
+{
+    public float blockDis = 5.0f;
+    public GameObject reallego;
+    public GameObject Lset;
+    public GameObject Hset;
+    public GameObject Wset;
+    GameObject blego;
+    int layermask;
+    int minlengthnum;
+    float minlengthsqr;
+    TMP_InputField ChangeL, ChangeW, ChangeH;
+    First_Legogenerator outlineset;
+    // Start is called before the first frame update
+    void Awake()
+    {
+        layermask = (-1) - (1 << LayerMask.NameToLayer("Ignore Raycast")) - (1 << LayerMask.NameToLayer("Player"));
+        ChangeL = Lset.GetComponent<TMP_InputField>();
+        ChangeH = Hset.GetComponent<TMP_InputField>();
+        ChangeW = Wset.GetComponent<TMP_InputField>();
+    }
+    void Start()
+    {
+        blego = Instantiate(reallego);
+        outlineset = blego.GetComponent<First_Legogenerator>();
+        (Vector3[] outline, int totalray) = outlineset.OutlineInfo();
+        minlengthnum = totalray;
+        int signfinder = (Camera.main.transform.forward.z >= 0 ? 1 : 0) + (Camera.main.transform.forward.y >= 0 ? 2 : 0) + (Camera.main.transform.forward.z >= 0 ? 4 : 0);
+        minlengthsqr = Vector3.SqrMagnitude(Camera.main.transform.forward * blockDis + outline[signfinder]);
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+
+        
+        float savedlength = Mathf.Sqrt(minlengthsqr);
+        Ray[] ray = new Ray[totalray];
+        ray[0] = new Ray(Camera.main.transform.position, Camera.main.transform.forward);
+        bool[] hityes = new bool[totalray];
+        RaycastHit[] hitinfo = new RaycastHit[totalray];
+        hityes[0] = Physics.Raycast(ray[0], out hitinfo[0], Mathf.Infinity, layermask);
+        float dummy = Vector3.SqrMagnitude(hitinfo[0].point - Camera.main.transform.position);
+        if (hityes[0] && dummy<minlengthsqr)
+        {
+            minlengthsqr = dummy;
+            minlengthnum = 0;
+        }
+        for (int i = 1; i < totalray; i++)
+        {
+            ray[i] = new Ray(Camera.main.transform.position, (Camera.main.transform.forward + outline[i-1].normalized/savedlength).normalized);
+            hityes[i] = Physics.Raycast(ray[i], out hitinfo[i], Mathf.Infinity, layermask);
+            dummy = Vector3.SqrMagnitude(hitinfo[i].point - Camera.main.transform.position);
+            if (hityes[i] && dummy < minlengthsqr)
+            {
+                minlengthsqr = dummy;
+                minlengthnum = i;
+            }
+        }
+        print(minlengthnum);
+        if (minlengthnum == totalray)
+        {
+            blego.transform.position = Camera.main.transform.position + blockDis * Camera.main.transform.forward;
+        }
+        else if (minlengthnum == 0)
+        {
+            Vector3 normalv = hitinfo[0].normal;
+            blego.transform.position = hitinfo[0].point + new Vector3(outline[signfinder].x * normalv.x, outline[signfinder].y * normalv.y, outline[signfinder].z * normalv.z);
+        }
+        else
+        {
+            Vector3 normalv = hitinfo[minlengthnum].normal;
+            blego.transform.position = hitinfo[minlengthnum].point - outline[minlengthnum - 1];
+
+        }
+        /*
+        if (Physics.Raycast(ray, out hitinfo, Mathf.Infinity, layermask) && Vector3.SqrMagnitude(transform.position - hitinfo.point) < (1 + outline.magnitude) * (1 + outline.magnitude) * blockDis * blockDis)
+        {
+            Vector3 normalv = hitinfo.normal;
+            if (normalv[1] < 0)
+            {
+                blego.transform.position = hitinfo.point + new Vector3(outline[0] * normalv[0], outline[1] * normalv[1], outline[2] * normalv[2]);
+            }
+            else
+            {
+                blego.transform.position = hitinfo.point + new Vector3(outline[0] * normalv[0], outline[1] * normalv[1], outline[2] * normalv[2]);
+            }
+        }
+        else
+        {
+            blego.transform.position = Camera.main.transform.position + blockDis * Camera.main.transform.forward;
+        }
+        */
+    }
+     
+    public void ChangeLHW()
+    { 
+        string cl = ChangeL.text;
+        int il = (cl != "") ? Mathf.Max(int.Parse(cl),2) : 2;
+        string ch = ChangeH.text;
+        int ih = (ch != "") ? Mathf.Max(int.Parse(ch), 1) : 1;
+        string cw = ChangeW.text;
+        int iw = (cw != "") ? Mathf.Max(int.Parse(cw), 2) : 2;
+        blockDis = 5.0f + Mathf.Sqrt((il - 2) * (il - 2) + (ih - 2) * (ih - 2) + (iw - 2) * (iw - 2));
+        outlineset.ChangeShape(il, ih, iw);
+    }
+}

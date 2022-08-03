@@ -1,0 +1,69 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+public class LegoPlace : MonoBehaviour
+{
+    public float blockDis = 5.0f;
+    public GameObject reallego;
+    public GameObject Lset;
+    public GameObject Hset;
+    public GameObject Wset;
+    Ray ray;
+    RaycastHit hitinfo;
+    GameObject blego;
+    int layermask;
+    TMP_InputField ChangeL, ChangeW, ChangeH;
+    First_Legogenerator outlineset;
+    Rigidbody bmove;
+    // Start is called before the first frame update
+    void Awake()
+    {
+        layermask = (-1) - (1 << LayerMask.NameToLayer("Ignore Raycast")) - (1 << LayerMask.NameToLayer("Player"));
+        ChangeL = Lset.GetComponent<TMP_InputField>();
+        ChangeH = Hset.GetComponent<TMP_InputField>();
+        ChangeW = Wset.GetComponent<TMP_InputField>();
+    }
+    void Start()
+    {
+        blego = Instantiate(reallego);
+        outlineset = blego.GetComponent<First_Legogenerator>();
+        bmove = blego.GetComponent<Rigidbody>();
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+
+    }
+
+    void FixedUpdate()
+    {
+        Vector3[] outline = outlineset.OutlineInfo();
+        int signfinder = (Camera.main.transform.forward.z >= 0 ? 1 : 0) + (Camera.main.transform.forward.y >= 0 ? 2 : 0) + (Camera.main.transform.forward.z >= 0 ? 4 : 0);
+        Vector3 blockposition = Camera.main.transform.position;
+        bmove.MovePosition(blockposition);
+        Vector3 prevposition = Camera.main.transform.position;
+        do
+        {
+            blockposition += Camera.main.transform.forward;
+            bmove.MovePosition(blockposition);
+        }
+        while (Vector3.SqrMagnitude(bmove.position - blockposition) < 1 || Vector3.SqrMagnitude(bmove.position - blockposition) < Vector3.SqrMagnitude(Camera.main.transform.forward * blockDis+outline[signfinder]));
+        
+    }
+
+    public void ChangeLHW()
+    { 
+        string cl = ChangeL.text;
+        int il = (cl != "") ? Mathf.Max(int.Parse(cl),2) : 2;
+        string ch = ChangeH.text;
+        int ih = (ch != "") ? Mathf.Max(int.Parse(ch), 1) : 1;
+        string cw = ChangeW.text;
+        int iw = (cw != "") ? Mathf.Max(int.Parse(cw), 2) : 2;
+        blockDis = 5.0f + Mathf.Sqrt((il - 2) * (il - 2) + (ih - 2) * (ih - 2) + (iw - 2) * (iw - 2));
+        outlineset.ChangeShape(il, ih, iw);
+    }
+}
